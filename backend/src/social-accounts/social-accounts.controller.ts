@@ -1,0 +1,216 @@
+import { Controller, Get, Post, Delete, Param, Body, UseGuards, Query, Res, Req } from '@nestjs/common';
+import { Response, Request } from 'express';
+import { ConfigService } from '@nestjs/config';
+import { SocialAccountsService } from './social-accounts.service';
+import { OAuthService } from './oauth/oauth.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ConnectAccountDto } from './dto/connect-account.dto';
+import { Platform } from './entities/social-account.entity';
+import { JwtService } from '@nestjs/jwt';
+
+@Controller('social-accounts')
+export class SocialAccountsController {
+  constructor(
+    private readonly socialAccountsService: SocialAccountsService,
+    private readonly oauthService: OAuthService,
+    private readonly configService: ConfigService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  async findAll(@CurrentUser() user: any) {
+    const userId = typeof user.userId === 'string' ? parseInt(user.userId) : user.userId;
+    return this.socialAccountsService.findAllByUser(userId);
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard)
+  async findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    const userId = typeof user.userId === 'string' ? parseInt(user.userId) : user.userId;
+    return this.socialAccountsService.findOne(parseInt(id), userId);
+  }
+
+  @Get('oauth/:platform/auth-url')
+  @UseGuards(JwtAuthGuard)
+  async getAuthUrl(@Param('platform') platform: string, @CurrentUser() user: any) {
+    let authUrl: string;
+
+    // Include user ID in state for callback
+    const state = this.jwtService.sign({ userId: user.userId, platform }, { expiresIn: '10m' });
+
+    switch (platform) {
+      case 'facebook':
+        authUrl = this.oauthService.getFacebookAuthUrl(state);
+        break;
+      case 'twitter':
+        authUrl = this.oauthService.getTwitterAuthUrl(state);
+        break;
+      case 'linkedin':
+        authUrl = this.oauthService.getLinkedInAuthUrl(state);
+        break;
+      default:
+        throw new Error(`Unsupported platform: ${platform}`);
+    }
+
+    return { authUrl };
+  }
+
+  @Get('oauth/:platform/callback')
+  async handleOAuthCallback(
+    @Param('platform') platform: string,
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Query('error') error: string,
+    @Query('error_description') errorDescription: string,
+    @Res() res: Response,
+  ) {
+    // Handle OAuth errors
+    if (error) {
+      return res.redirect(
+        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(errorDescription || 'Authorization failed')}`
+      );
+    }
+
+    if (!code || !state) {
+      return res.redirect(
+        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?error=missing_parameters&error_description=${encodeURIComponent('Missing authorization code or state')}`
+      );
+    }
+
+    // Decode state to get user ID
+    let userId: number;
+    try {
+      const decoded = this.jwtService.verify(state);
+      userId = parseInt(decoded.userId);
+    } catch (error) {
+      return res.redirect(
+        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?error=invalid_state&error_description=${encodeURIComponent('Invalid or expired state parameter')}`
+      );
+    }
+
+    try {
+      let accountData: any;
+
+      switch (platform) {
+        case 'facebook':
+          const fbTokenData = await this.oauthService.getFacebookAccessToken(code);
+          const fbUserInfo = await this.oauthService.getFacebookUserInfo(fbTokenData.access_token);
+          const fbPages = await this.oauthService.getFacebookPages(fbTokenData.access_token);
+
+          accountData = {
+            platform: Platform.FACEBOOK,
+            platformAccountId: fbUserInfo.id,
+            platformAccountName: fbUserInfo.name,
+            platformAccountUsername: fbUserInfo.email,
+            avatar: fbUserInfo.picture?.data?.url,
+            accessToken: fbTokenData.access_token,
+            refreshToken: fbTokenData.access_token,
+            isVerified: true,
+            metadata: JSON.stringify({
+              pages: fbPages,
+              email: fbUserInfo.email,
+            }),
+          };
+          break;
+
+        case 'twitter':
+          const twitterTokenData = await this.oauthService.getTwitterAccessToken(code);
+          const twitterUserInfo = await this.oauthService.getTwitterUserInfo(twitterTokenData.access_token);
+
+          accountData = {
+            platform: Platform.TWITTER,
+            platformAccountId: twitterUserInfo.id,
+            platformAccountName: twitterUserInfo.name,
+            platformAccountUsername: twitterUserInfo.username,
+            avatar: twitterUserInfo.profile_image_url,
+            accessToken: twitterTokenData.access_token,
+            refreshToken: twitterTokenData.refresh_token,
+            tokenExpiresAt: twitterTokenData.expires_in
+              ? new Date(Date.now() + twitterTokenData.expires_in * 1000)
+              : null,
+            isVerified: true,
+            metadata: JSON.stringify({
+              email: twitterUserInfo.email,
+            }),
+          };
+          break;
+
+        case 'linkedin':
+          const linkedInTokenData = await this.oauthService.getLinkedInAccessToken(code);
+          const linkedInUserInfo = await this.oauthService.getLinkedInUserInfo(linkedInTokenData.access_token);
+
+          accountData = {
+            platform: Platform.LINKEDIN,
+            platformAccountId: linkedInUserInfo.sub,
+            platformAccountName: linkedInUserInfo.name || linkedInUserInfo.email,
+            platformAccountUsername: linkedInUserInfo.email,
+            avatar: linkedInUserInfo.picture,
+            accessToken: linkedInTokenData.access_token,
+            refreshToken: linkedInTokenData.refresh_token,
+            tokenExpiresAt: linkedInTokenData.expires_in
+              ? new Date(Date.now() + linkedInTokenData.expires_in * 1000)
+              : null,
+            isVerified: true,
+            metadata: JSON.stringify({
+              email: linkedInUserInfo.email,
+            }),
+          };
+          break;
+
+        default:
+          throw new Error(`Unsupported platform: ${platform}`);
+      }
+
+      // Check if account already exists
+      const existingAccounts = await this.socialAccountsService.findAllByUser(userId);
+      const duplicate = existingAccounts.find(
+        (acc) => acc.platform === accountData.platform && acc.platformAccountId === accountData.platformAccountId,
+      );
+
+      if (duplicate) {
+        // Update existing account
+        await this.socialAccountsService.update(duplicate.id, userId, accountData);
+      } else {
+        // Create new account
+        await this.socialAccountsService.create({
+          ...accountData,
+          userId,
+        });
+      }
+
+      // Redirect to frontend success page
+      return res.redirect(
+        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?success=true`
+      );
+    } catch (error) {
+      return res.redirect(
+        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?error=connection_failed&error_description=${encodeURIComponent(error.message || 'Failed to connect account')}`
+      );
+    }
+  }
+
+  @Post()
+  @UseGuards(JwtAuthGuard)
+  async create(@Body() createDto: ConnectAccountDto, @CurrentUser() user: any) {
+    const userId = typeof user.userId === 'string' ? parseInt(user.userId) : user.userId;
+    const accountData: any = {
+      ...createDto,
+      userId,
+    };
+    // Convert metadata to JSON string if present
+    if (accountData.metadata && typeof accountData.metadata === 'object') {
+      accountData.metadata = JSON.stringify(accountData.metadata);
+    }
+    return this.socialAccountsService.create(accountData);
+  }
+
+  @Delete(':id')
+  @UseGuards(JwtAuthGuard)
+  async delete(@Param('id') id: string, @CurrentUser() user: any) {
+    const userId = typeof user.userId === 'string' ? parseInt(user.userId) : user.userId;
+    await this.socialAccountsService.delete(parseInt(id), userId);
+    return { message: 'Account disconnected successfully' };
+  }
+}
