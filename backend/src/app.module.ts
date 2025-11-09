@@ -25,7 +25,11 @@ import { AIModule } from './ai/ai.module';
         const nodeEnv = configService.get<string>('NODE_ENV', 'development');
         const databaseUrl = configService.get<string>('DATABASE_URL');
         const dbType = configService.get<string>('DB_TYPE', databaseUrl ? 'postgres' : 'sqlite');
-        const synchronize = nodeEnv !== 'production';
+        const synchronizeEnv = configService.get<string>('DB_SYNCHRONIZE');
+        const synchronize =
+          typeof synchronizeEnv === 'string'
+            ? synchronizeEnv.toLowerCase() === 'true'
+            : nodeEnv !== 'production';
         const logging = nodeEnv === 'development';
 
         if (databaseUrl) {
