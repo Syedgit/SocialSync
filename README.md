@@ -13,6 +13,7 @@ SocialSync is a mobile-first social media management platform that lets you sche
 - **[AI Features Analysis](./AI_FEATURES_ANALYSIS.md)** - AI features in competitors
 - **[AI Features Roadmap](./AI_FEATURES_ROADMAP.md)** - AI implementation plan
 - **[AI Setup Guide](./AI_SETUP.md)** - How to set up AI features
+- **[Backend Deployment (Render)](./DEPLOY_BACKEND_RENDER.md)** - Step-by-step Render setup
 
 ## ✨ AI Features
 
