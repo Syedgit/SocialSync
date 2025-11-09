@@ -23,7 +23,7 @@ export default function AIPostGenerator({ onSelect, platforms, onClose }: AIPost
     setIsGenerating(true);
     setError(null);
     try {
-      const generated = await aiService.generatePost(prompt, tone, platforms);
+      const generated = await aiService.generatePost({ prompt, tone, platforms });
       setVariations(generated);
     } catch (err: any) {
       setError(err.message || 'Failed to generate post. Please check your OpenAI API key configuration.');

@@ -314,7 +314,7 @@ export default function PostsPage() {
                         </svg>
                       </button>
                       <button
-                        onClick={() => setShowDeleteConfirm(post.id)}
+                        onClick={() => setShowDeleteConfirm(String(post.id))}
                         className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors touch-manipulation"
                         style={{ minHeight: '44px', minWidth: '44px' }}
                       >
@@ -391,14 +391,14 @@ export default function PostsPage() {
                 </div>
 
                 {/* Delete Confirmation */}
-                {showDeleteConfirm === post.id && (
+                {showDeleteConfirm === String(post.id) && (
                   <div className="bg-red-50 border-t border-red-200 p-4">
                     <p className="text-sm text-red-800 mb-3">
                       Are you sure you want to delete this post? This action cannot be undone.
                     </p>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleDelete(post.id)}
+                        onClick={() => handleDelete(String(post.id))}
                         className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
                       >
                         Delete

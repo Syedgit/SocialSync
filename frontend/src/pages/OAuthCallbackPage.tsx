@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { oauthService } from '../services/oauth.service';
 import { socialAccountsService } from '../services/social-accounts.service';
 
 export default function OAuthCallbackPage() {

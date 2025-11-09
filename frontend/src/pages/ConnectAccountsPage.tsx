@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { socialAccountsService, SocialAccount } from '../services/social-accounts.service';
+import { socialAccountsService } from '../services/social-accounts.service';
 import { oauthService } from '../services/oauth.service';
 import {
   FacebookIcon,
@@ -99,7 +99,6 @@ const platforms: SocialPlatform[] = [
 export default function ConnectAccountsPage() {
   const [accounts, setAccounts] = useState<SocialPlatform[]>(platforms);
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
-  const [connectedAccounts, setConnectedAccounts] = useState<SocialAccount[]>([]);
 
   useEffect(() => {
     loadConnectedAccounts();
@@ -108,7 +107,6 @@ export default function ConnectAccountsPage() {
   const loadConnectedAccounts = async () => {
     try {
       const accounts = await socialAccountsService.getAll();
-      setConnectedAccounts(accounts);
       
       // Update platform connection status
       setAccounts((prev) =>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { postsService, CreatePostData, Post } from '../services/posts.service';
+import { postsService, CreatePostData } from '../services/posts.service';
 import { socialAccountsService, SocialAccount } from '../services/social-accounts.service';
 import { aiService } from '../services/ai.service';
 import {
@@ -41,10 +41,8 @@ export default function CreatePostPage() {
   const [showAIGenerator, setShowAIGenerator] = useState(false);
   const [suggestedHashtags, setSuggestedHashtags] = useState<string[]>([]);
   const [isLoadingHashtags, setIsLoadingHashtags] = useState(false);
-  const [hashtagError, setHashtagError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
-  const [currentPost, setCurrentPost] = useState<Post | null>(null);
   const [searchParams] = useSearchParams();
   const postIdParam = searchParams.get('postId');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -104,7 +102,6 @@ export default function CreatePostPage() {
     try {
       setIsLoading(true);
       const post = await postsService.getOne(postId);
-      setCurrentPost(post);
       setIsEditing(true);
 
       setValue('content', post.content);
@@ -252,10 +249,6 @@ export default function CreatePostPage() {
     return connectedAccounts.find((acc) => acc.platform === platformId);
   };
 
-  const getPlatformConfig = (platformId: string) => {
-    return platformConfig.find((p) => p.id === platformId);
-  };
-
   const handleAISelect = (generatedContent: string) => {
     setValue('content', generatedContent);
     // Hashtags will be suggested automatically via useEffect
@@ -270,7 +263,6 @@ export default function CreatePostPage() {
     // Debounce hashtag suggestions
     const timeoutId = setTimeout(async () => {
       setIsLoadingHashtags(true);
-      setHashtagError(null);
       try {
         const primaryPlatform = selectedPlatforms[0] || 'instagram';
         const hashtags = await aiService.suggestHashtags({

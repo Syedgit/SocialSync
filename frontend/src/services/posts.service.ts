@@ -19,6 +19,7 @@ export interface CreatePostData {
   scheduledFor?: string;
   platforms: string[];
   socialAccountId?: string;
+  status?: 'draft' | 'scheduled' | 'published' | 'failed';
 }
 
 export const postsService = {
