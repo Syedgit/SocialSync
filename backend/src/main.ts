@@ -4,13 +4,22 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  
+  const rawOrigins = process.env.FRONTEND_URLS || process.env.FRONTEND_URL || 'http://localhost:5173';
+  const parsedOrigins = rawOrigins
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  if (parsedOrigins.length === 0) {
+    parsedOrigins.push('http://localhost:5173');
+  }
+  const allowAllOrigins = parsedOrigins.includes('*');
+
   // Set global prefix
   app.setGlobalPrefix('api');
   
   // Enable CORS
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: allowAllOrigins ? true : parsedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -29,8 +38,15 @@ async function bootstrap() {
   );
 
   const port = process.env.PORT || 3000;
-  await app.listen(port);
-  console.log(`🚀 Application is running on: http://localhost:${port}/api`);
+  const enableHttp = (process.env.ENABLE_HTTP ?? 'true').toLowerCase() !== 'false';
+
+  if (enableHttp) {
+    await app.listen(port);
+    console.log(`🚀 Application is running on: http://localhost:${port}/api`);
+  } else {
+    await app.init();
+    console.log('🛠  Application initialized without HTTP server (worker mode).');
+  }
 }
 bootstrap();
 

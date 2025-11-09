@@ -23,24 +23,42 @@ interface SchedulerMetadata {
 export class PostsSchedulerService implements OnModuleDestroy, OnModuleInit {
   private readonly logger = new Logger(PostsSchedulerService.name);
   private readonly queueName = 'scheduled-posts';
-  private readonly queue: Queue<PostJobData>;
-  private readonly worker: Worker<PostJobData>;
-  private readonly queueEvents: QueueEvents;
+  private readonly queue?: Queue<PostJobData>;
+  private readonly worker?: Worker<PostJobData>;
+  private readonly queueEvents?: QueueEvents;
+  private readonly isEnabled: boolean;
 
   constructor(
     private readonly configService: ConfigService,
     @InjectRepository(Post)
     private readonly postsRepository: Repository<Post>,
   ) {
+    const enabledFlag = this.configService.get<string>('ENABLE_SCHEDULER', 'true');
+    this.isEnabled = enabledFlag?.toLowerCase() !== 'false';
+
+    if (!this.isEnabled) {
+      this.logger.warn('Posts scheduler is disabled via ENABLE_SCHEDULER environment variable.');
+      return;
+    }
+
     const host = this.configService.get<string>('REDIS_HOST', '127.0.0.1');
     const port = parseInt(this.configService.get<string>('REDIS_PORT', '6379'), 10);
     const password = this.configService.get<string>('REDIS_PASSWORD');
+    const username = this.configService.get<string>('REDIS_USERNAME');
+    const tlsEnabled = this.configService.get<string>('REDIS_TLS', 'false').toLowerCase() === 'true';
 
-    const connection = {
+    const connection: Record<string, any> = {
       host,
       port,
       password: password || undefined,
+      username: username || undefined,
     };
+
+    if (tlsEnabled) {
+      connection.tls = {
+        rejectUnauthorized: false,
+      };
+    }
 
     this.queue = new Queue<PostJobData>(this.queueName, {
       connection,
@@ -85,18 +103,28 @@ export class PostsSchedulerService implements OnModuleDestroy, OnModuleInit {
   }
 
   async onModuleInit() {
+    if (!this.isEnabled || !this.queue) {
+      return;
+    }
     await this.recoverScheduledPosts();
   }
 
   async onModuleDestroy() {
+    if (!this.isEnabled) {
+      return;
+    }
+
     await Promise.allSettled([
-      this.worker.close(),
-      this.queue.close(),
-      this.queueEvents.close(),
+      this.worker?.close(),
+      this.queue?.close(),
+      this.queueEvents?.close(),
     ]);
   }
 
   async schedulePost(post: Post) {
+    if (!this.isEnabled || !this.queue) {
+      return;
+    }
     if (!post.id || !post.scheduledFor || post.status !== PostStatus.SCHEDULED) {
       return;
     }
@@ -135,6 +163,9 @@ export class PostsSchedulerService implements OnModuleDestroy, OnModuleInit {
   }
 
   async cancelScheduledPost(postId: number) {
+    if (!this.isEnabled || !this.queue) {
+      return;
+    }
     const jobId = this.getJobId(postId);
     await this.queue.remove(jobId).catch(() => undefined);
     const post = await this.postsRepository.findOne({ where: { id: postId } });
@@ -163,6 +194,9 @@ export class PostsSchedulerService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async handleJob(job: Job<PostJobData>) {
+    if (!this.isEnabled) {
+      return;
+    }
     const { postId } = job.data;
     const post = await this.postsRepository.findOne({ where: { id: postId } });
 
@@ -287,6 +321,9 @@ export class PostsSchedulerService implements OnModuleDestroy, OnModuleInit {
   }
 
   private async recoverScheduledPosts() {
+    if (!this.isEnabled || !this.queue) {
+      return;
+    }
     const scheduledPosts = await this.postsRepository.find({
       where: {
         status: PostStatus.SCHEDULED,
