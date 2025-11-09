@@ -13,6 +13,9 @@ import SchedulePage from './pages/SchedulePage';
 import AccountsPage from './pages/AccountsPage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsOfServicePage from './pages/TermsOfServicePage';
+import DataDeletionPage from './pages/DataDeletionPage';
 
 function App() {
   return (
@@ -28,6 +31,9 @@ function App() {
           <Route index element={<HomePage />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="signup" element={<SignupPage />} />
+          <Route path="privacy" element={<PrivacyPolicyPage />} />
+          <Route path="terms" element={<TermsOfServicePage />} />
+          <Route path="data-deletion" element={<DataDeletionPage />} />
         </Route>
 
         {/* Protected routes */}

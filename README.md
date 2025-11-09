@@ -119,7 +119,7 @@ A comprehensive social media management platform that allows users to post to mu
   - YouTube Data API v3
 
 ### Background Jobs & Scheduling
-- **Job Queue**: BullMQ or Bull (Redis-based)
+- **Job Queue**: BullMQ (Redis-based) scheduler for delayed post publishing
 - **Cron Jobs**: node-cron for recurring tasks
 - **Webhooks**: Handle platform callbacks and updates
 

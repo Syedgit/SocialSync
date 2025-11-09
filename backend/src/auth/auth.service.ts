@@ -6,6 +6,7 @@ import * as bcrypt from 'bcrypt';
 import { User } from '../users/entities/user.entity';
 import { SignupDto } from './dto/signup.dto';
 import { LoginDto } from './dto/login.dto';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
@@ -13,6 +14,7 @@ export class AuthService {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
     private jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async signup(signupDto: SignupDto) {
@@ -40,7 +42,9 @@ export class AuthService {
 
       // Generate JWT token
       const payload = { sub: user.id, email: user.email };
-      const accessToken = this.jwtService.sign(payload);
+      const jwtSecret = this.configService.get<string>('JWT_SECRET') || 'your-secret-key';
+      console.log('[AuthService] signing token with secret', jwtSecret);
+      const accessToken = this.jwtService.sign(payload, { secret: jwtSecret });
 
       return {
         accessToken,
@@ -74,7 +78,9 @@ export class AuthService {
 
     // Generate JWT token
     const payload = { sub: user.id, email: user.email };
-    const accessToken = this.jwtService.sign(payload);
+    const jwtSecret = this.configService.get<string>('JWT_SECRET') || 'your-secret-key';
+    console.log('[AuthService] signing token with secret', jwtSecret);
+    const accessToken = this.jwtService.sign(payload, { secret: jwtSecret });
 
     return {
       accessToken,
@@ -88,6 +94,9 @@ export class AuthService {
   }
 
   async validateUser(userId: number): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { id: userId } });
+    console.log('[AuthService] validateUser called', { userId, type: typeof userId });
+    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    console.log('[AuthService] validateUser result', user ? { id: user.id, email: user.email } : null);
+    return user;
   }
 }

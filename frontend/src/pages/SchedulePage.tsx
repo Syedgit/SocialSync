@@ -495,7 +495,7 @@ export default function SchedulePage() {
                     </div>
                     <div className="flex items-start gap-2">
                       <button
-                        onClick={() => navigate(`/dashboard/posts/edit/${post.id}`)}
+                        onClick={() => navigate(`/dashboard/posts/create?postId=${post.id}`)}
                         className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors touch-manipulation"
                         style={{ minHeight: '44px', minWidth: '44px' }}
                       >
@@ -553,7 +553,7 @@ export default function SchedulePage() {
                   {/* Actions */}
                   <div className="flex gap-2 pt-4 border-t border-gray-200">
                     <button
-                      onClick={() => navigate(`/dashboard/posts/edit/${post.id}`)}
+                      onClick={() => navigate(`/dashboard/posts/create?postId=${post.id}`)}
                       className="px-4 py-2 text-sm font-medium text-indigo-600 border border-indigo-300 rounded-lg hover:bg-indigo-50 transition-colors"
                     >
                       Edit

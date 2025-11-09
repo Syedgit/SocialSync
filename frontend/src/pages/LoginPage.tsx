@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuthStore } from '../store/authStore';
+import { authService } from '../services/auth.service';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -17,6 +18,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const login = useAuthStore((state) => state.login);
+  const storeAuth = useAuthStore((state) => state.isAuthenticated);
   const {
     register,
     handleSubmit,
@@ -24,6 +26,14 @@ export default function LoginPage() {
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
   });
+
+  useEffect(() => {
+    const token = authService.getToken();
+    const user = authService.getUser();
+    if ((token && user) || storeAuth) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [navigate, storeAuth]);
 
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);

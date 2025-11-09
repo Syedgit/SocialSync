@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate } from 'react-router-dom';
-import { postsService, CreatePostData } from '../services/posts.service';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { postsService, CreatePostData, Post } from '../services/posts.service';
 import { socialAccountsService, SocialAccount } from '../services/social-accounts.service';
 import { aiService } from '../services/ai.service';
 import {
@@ -42,6 +42,11 @@ export default function CreatePostPage() {
   const [suggestedHashtags, setSuggestedHashtags] = useState<string[]>([]);
   const [isLoadingHashtags, setIsLoadingHashtags] = useState(false);
   const [hashtagError, setHashtagError] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([]);
+  const [currentPost, setCurrentPost] = useState<Post | null>(null);
+  const [searchParams] = useSearchParams();
+  const postIdParam = searchParams.get('postId');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
 
@@ -64,6 +69,12 @@ export default function CreatePostPage() {
     loadAccounts();
   }, []);
 
+  useEffect(() => {
+    if (postIdParam) {
+      initializeForEdit(postIdParam);
+    }
+  }, [postIdParam]);
+
   // Cleanup media previews on unmount
   useEffect(() => {
     return () => {
@@ -80,10 +91,50 @@ export default function CreatePostPage() {
     try {
       const accounts = await socialAccountsService.getAll();
       setConnectedAccounts(accounts);
-      const availablePlatforms = accounts.map((acc) => acc.platform);
-      setSelectedPlatforms(availablePlatforms);
+      if (!postIdParam) {
+        const availablePlatforms = accounts.map((acc) => acc.platform);
+        setSelectedPlatforms(availablePlatforms);
+      }
     } catch (error) {
       console.error('Failed to load accounts:', error);
+    }
+  };
+
+  const initializeForEdit = async (postId: string) => {
+    try {
+      setIsLoading(true);
+      const post = await postsService.getOne(postId);
+      setCurrentPost(post);
+      setIsEditing(true);
+
+      setValue('content', post.content);
+
+      const platforms = Array.isArray(post.platforms)
+        ? (post.platforms as string[])
+        : typeof post.platforms === 'string'
+        ? safeParseArray(post.platforms)
+        : [];
+      setSelectedPlatforms(platforms);
+
+      if (post.status === 'scheduled' && post.scheduledFor) {
+        setPostType('schedule');
+        setValue('scheduledFor', formatDatetimeLocal(post.scheduledFor));
+      } else {
+        setPostType('now');
+      }
+
+      const media = Array.isArray(post.mediaUrls)
+        ? (post.mediaUrls as string[])
+        : typeof post.mediaUrls === 'string'
+        ? safeParseArray(post.mediaUrls)
+        : [];
+      setExistingMediaUrls(media);
+    } catch (error) {
+      console.error('Failed to load post for editing:', error);
+      alert('Unable to load the post for editing.');
+      navigate('/dashboard/posts');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -177,14 +228,18 @@ export default function CreatePostPage() {
         content: data.content,
         platforms: selectedPlatforms,
         status: postType === 'now' ? 'published' : 'scheduled',
-        mediaUrls: mediaUrls.length > 0 ? mediaUrls : undefined,
+        mediaUrls: [...existingMediaUrls, ...mediaUrls].length > 0 ? [...existingMediaUrls, ...mediaUrls] : undefined,
       };
 
       if (postType === 'schedule' && data.scheduledFor) {
         postData.scheduledFor = new Date(data.scheduledFor).toISOString();
       }
 
-      await postsService.create(postData);
+      if (isEditing && postIdParam) {
+        await postsService.update(postIdParam, postData);
+      } else {
+        await postsService.create(postData);
+      }
       navigate('/dashboard/posts');
     } catch (error: any) {
       alert(error.response?.data?.message || 'Failed to create post');
@@ -249,9 +304,13 @@ export default function CreatePostPage() {
       <div className="max-w-4xl mx-auto">
         <div className="mb-8 animate-fade-in-up">
           <h1 className="text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-            Create New Post
+            {isEditing ? 'Edit Post' : 'Create New Post'}
           </h1>
-          <p className="mt-2 text-gray-600">Write and schedule posts for your connected social media accounts.</p>
+          <p className="mt-2 text-gray-600">
+            {isEditing
+              ? 'Update your post content, schedule, and platforms.'
+              : 'Write and schedule posts for your connected social media accounts.'}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
@@ -306,7 +365,7 @@ export default function CreatePostPage() {
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
               {platformConfig.map((platform) => {
-                const isConnected = getConnectedAccount(platform.id);
+                const isConnected = Boolean(getConnectedAccount(platform.id));
                 const isSelected = selectedPlatforms.includes(platform.id);
                 const IconComponent = platform.icon;
 
@@ -315,12 +374,11 @@ export default function CreatePostPage() {
                     key={platform.id}
                     type="button"
                     onClick={() => togglePlatform(platform.id)}
-                    disabled={!isConnected}
-                    className={`relative p-4 rounded-xl border-2 transition-all duration-200 group ${
+                    className={`relative p-4 rounded-xl border-2 transition-all duration-200 group cursor-pointer ${
                       isSelected
                         ? 'border-indigo-500 bg-gradient-to-br from-indigo-50 to-purple-50 shadow-md scale-105'
                         : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-                    } ${!isConnected ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}
+                    } ${!isConnected ? 'opacity-70' : ''}`}
                   >
                     <div className="flex flex-col items-center gap-2">
                       <div
@@ -336,10 +394,8 @@ export default function CreatePostPage() {
                       </div>
                     </div>
                     {!isConnected && (
-                      <div className="absolute top-1 right-1">
-                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
+                      <div className="absolute top-1 right-1 px-2 py-0.5 bg-gray-200 text-gray-700 rounded-full text-[10px] font-semibold">
+                        For Testing
                       </div>
                     )}
                     {isSelected && (
@@ -363,10 +419,13 @@ export default function CreatePostPage() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
-                  Please connect at least one social media account to continue.
+                  Select at least one platform (connections optional while testing — posts will stay within SocialSync).
                 </p>
               </div>
             )}
+            <div className="mt-3 text-xs text-gray-500 leading-relaxed">
+              You can select platforms even if accounts aren’t connected. This is for testing the scheduler and content flows — external publishing will only work after real OAuth connections are set up.
+            </div>
           </div>
 
           {/* Content Editor */}
@@ -477,6 +536,28 @@ export default function CreatePostPage() {
           {/* Media Upload */}
           <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
             <label className="block text-sm font-semibold text-gray-700 mb-3">Media</label>
+            {existingMediaUrls.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Existing Media</h3>
+                <div className="flex flex-wrap gap-3">
+                  {existingMediaUrls.map((url, idx) => (
+                    <div key={`existing-${idx}`} className="relative">
+                      <img src={url} alt={`Existing media ${idx + 1}`} className="h-24 w-24 object-cover rounded-lg border border-gray-200" />
+                      <button
+                        type="button"
+                        onClick={() => setExistingMediaUrls((prev) => prev.filter((_, i) => i !== idx))}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md"
+                        title="Remove"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <input
               ref={fileInputRef}
               type="file"
@@ -585,10 +666,10 @@ export default function CreatePostPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  {postType === 'now' ? 'Publishing...' : 'Scheduling...'}
+                  {postType === 'now' ? (isEditing ? 'Updating...' : 'Publishing...') : isEditing ? 'Updating...' : 'Scheduling...'}
                 </span>
               ) : (
-                postType === 'now' ? 'Publish Now' : 'Schedule Post'
+                isEditing ? 'Save Changes' : postType === 'now' ? 'Publish Now' : 'Schedule Post'
               )}
             </button>
           </div>
@@ -605,4 +686,20 @@ export default function CreatePostPage() {
       </div>
     </div>
   );
+}
+
+function safeParseArray(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function formatDatetimeLocal(value: string): string {
+  const date = new Date(value);
+  const tzOffset = date.getTimezoneOffset() * 60000;
+  const localISOTime = new Date(date.getTime() - tzOffset).toISOString().slice(0, 16);
+  return localISOTime;
 }

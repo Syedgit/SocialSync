@@ -305,7 +305,7 @@ export default function PostsPage() {
                     </div>
                     <div className="flex items-start gap-2">
                       <button
-                        onClick={() => navigate(`/dashboard/posts/edit/${post.id}`)}
+                        onClick={() => navigate(`/dashboard/posts/create?postId=${post.id}`)}
                         className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors touch-manipulation"
                         style={{ minHeight: '44px', minWidth: '44px' }}
                       >

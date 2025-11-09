@@ -16,6 +16,18 @@
   - `ai.module.ts` - NestJS module configuration
   - Integrated with OpenAI GPT-4o-mini API
 
+### Backend Scheduling & Automation (NEW)
+- ✅ **BullMQ Scheduler** (`backend/src/posts/posts.scheduler.ts`)
+  - Redis-backed queue for delayed post publishing
+  - Automatic job creation / rescheduling when posts are saved
+  - Worker promotes scheduled posts to `published` and records outcomes
+  - Metadata tracking for scheduler status, last run, and failures
+  - Startup recovery scans for scheduled posts, re-queues overdue items, and logs recovery time
+- ✅ **PostsService integration** (`backend/src/posts/posts.service.ts`)
+  - Schedules jobs when status is `scheduled`
+  - Cancels jobs when posts move to draft/published/failed or are deleted
+  - Auto-sets `publishedAt` timestamps for immediate posts
+
 ### Frontend AI Integration
 - ✅ **AI Post Generator Component** (`frontend/src/components/AIPostGenerator.tsx`)
   - Modal UI with prompt input
