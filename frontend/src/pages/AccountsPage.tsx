@@ -133,7 +133,7 @@ export default function AccountsPage() {
     return new Date(dateString).toLocaleDateString();
   };
 
-  const isTokenExpired = (account: SocialAccount) => {
+  const isTokenExpired = (_account: SocialAccount) => {
     // Check if token might be expired (this is a simple check)
     // In production, you'd check tokenExpiresAt from the backend
     return false; // Placeholder - backend should provide this info
@@ -443,7 +443,7 @@ export default function AccountsPage() {
                       View Posts
                     </button>
                     <button
-                      onClick={() => setShowDeleteConfirm(account.id)}
+                      onClick={() => setShowDeleteConfirm(String(account.id))}
                       className="w-full px-4 py-2.5 text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 active:bg-red-100 transition-colors touch-manipulation"
                       style={{ minHeight: '44px' }}
                     >
@@ -453,14 +453,14 @@ export default function AccountsPage() {
                 </div>
 
                 {/* Delete Confirmation */}
-                {showDeleteConfirm === account.id && (
+                {showDeleteConfirm === String(account.id) && (
                   <div className="bg-red-50 border-t border-red-200 p-4">
                     <p className="text-sm text-red-800 mb-3">
                       Are you sure you want to disconnect this account? All scheduled posts for this account will be cancelled.
                     </p>
                     <div className="flex gap-2">
                       <button
-                        onClick={() => handleDelete(account.id)}
+                        onClick={() => handleDelete(String(account.id))}
                         className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
                       >
                         Disconnect

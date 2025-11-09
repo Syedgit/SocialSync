@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { postsService, Post } from '../services/posts.service';
-import { socialAccountsService, SocialAccount } from '../services/social-accounts.service';
 import {
   FacebookIcon,
   InstagramIcon,
@@ -48,7 +47,6 @@ interface AnalyticsData {
 
 export default function AnalyticsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
-  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<'7d' | '30d' | '90d' | 'all'>('30d');
@@ -249,19 +247,14 @@ export default function AnalyticsPage() {
     try {
       setIsLoading(true);
       console.log('Loading analytics data...');
-      const [postsData, accountsData] = await Promise.all([
-        postsService.getAll(),
-        socialAccountsService.getAll(),
-      ]);
-      console.log('Analytics data loaded:', { posts: postsData?.length || 0, accounts: accountsData?.length || 0 });
+      const postsData = await postsService.getAll();
+      console.log('Analytics data loaded:', { posts: postsData?.length || 0 });
       setPosts(postsData || []);
-      setAccounts(accountsData || []);
       // Don't set isLoading to false here - let calculateAnalytics handle it
     } catch (error) {
       console.error('Failed to load analytics data:', error);
       // Set empty arrays on error so analytics can still calculate
       setPosts([]);
-      setAccounts([]);
       setIsLoading(false);
     }
   };
@@ -308,7 +301,7 @@ export default function AnalyticsPage() {
         </div>
         {/* Labels row - separated to prevent overlap */}
         <div className="absolute bottom-0 left-0 right-0 h-12 flex items-start justify-between gap-0.5 sm:gap-1">
-          {data.map((value, index) => {
+          {data.map((_, index) => {
             const showLabel = index % optimalInterval === 0 || index === data.length - 1;
             if (!showLabel) {
               return <div key={index} className="flex-1"></div>;
