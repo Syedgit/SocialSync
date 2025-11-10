@@ -18,6 +18,7 @@ Refer to `backend/env.example` and decide on the real values you’ll use in pro
 | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | Redis connection |
 | OAuth secrets (Facebook/Twitter/LinkedIn) | populate when ready |
 | `OPENAI_API_KEY` | only if AI endpoints stay enabled |
+| `ENCRYPTION_KEY` | 32-byte base64/hex key for encrypting stored tokens |
 
 > **Tip:** Render lets you reference secrets from other services, so you can provision Postgres/Redis first and then pull their URLs straight into the Web Service config.
 

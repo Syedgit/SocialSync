@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { Post } from '../../posts/entities/post.entity';
+import { encryptionTransformer } from '../../common/security/encryption.transformer';
 
 export enum Platform {
   FACEBOOK = 'facebook',
@@ -50,10 +51,10 @@ export class SocialAccount {
   @Column({ nullable: true })
   avatar: string;
 
-  @Column('text', { nullable: true })
+  @Column('text', { nullable: true, transformer: encryptionTransformer })
   accessToken: string;
 
-  @Column('text', { nullable: true })
+  @Column('text', { nullable: true, transformer: encryptionTransformer })
   refreshToken: string;
 
   @Column({ nullable: true })

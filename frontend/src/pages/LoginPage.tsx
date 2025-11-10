@@ -74,57 +74,26 @@ export default function LoginPage() {
         return;
       }
 
-      // Wait for store state to update and ensure everything is saved
-      await new Promise(resolve => setTimeout(resolve, 300));
+      // Small delay to ensure localStorage is committed
+      await new Promise(resolve => setTimeout(resolve, 50));
       
-      // Final verification - check both localStorage and store
+      // Final verification
       const finalToken = localStorage.getItem('token');
       const finalUser = localStorage.getItem('user');
       
       if (!finalToken || !finalUser) {
-        console.error('❌ Token or user disappeared from localStorage');
+        console.error('❌ Token or user not saved to localStorage');
         setError('Authentication failed. Please try again.');
         setIsLoading(false);
         return;
       }
 
-      // Verify the store has the user set
-      const { user: storeUser, isAuthenticated: storeAuth } = useAuthStore.getState();
-      console.log('📊 Store state check:', { 
-        hasStoreUser: !!storeUser, 
-        storeAuth,
-        storeUserEmail: storeUser?.email 
-      });
-
-      // Ensure store is updated with user data
-      if (!storeUser || !storeAuth) {
-        console.log('⚠️ Store not updated yet, updating manually...');
-        const parsedUser = JSON.parse(finalUser);
-        useAuthStore.getState().setUser(parsedUser);
-      }
-
-      console.log('🚀 All checks passed, navigating to dashboard...');
-      console.log('📍 Current path:', window.location.pathname);
-      console.log('💾 Final localStorage before navigation:', {
-        token: !!localStorage.getItem('token'),
-        user: !!localStorage.getItem('user')
-      });
+      // Ensure store is synced
+      const parsedUser = JSON.parse(finalUser);
+      useAuthStore.getState().setUser(parsedUser);
       
-      // Extra delay to ensure everything is committed
-      await new Promise(resolve => setTimeout(resolve, 200));
-      
-      // Final check - if token is still there, navigate
-      const veryFinalToken = localStorage.getItem('token');
-      if (!veryFinalToken) {
-        console.error('❌ Token disappeared before navigation!');
-        setError('Authentication failed. Please try again.');
-        setIsLoading(false);
-        return;
-      }
-      
-      // Use window.location for a hard navigation to avoid React Router race conditions
-      // This ensures ProtectedRoute gets a fresh check with the saved token
-      window.location.href = '/dashboard';
+      // Navigate - ProtectedRoute will check synchronously
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       console.error('❌ Login error:', err);
       const errorMessage = err.response?.data?.message || err.message || 'Login failed. Please try again.';

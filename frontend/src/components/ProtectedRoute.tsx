@@ -9,76 +9,39 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { setUser } = useAuthStore();
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(() => {
+    // Synchronous initial check - critical for immediate navigation after login
+    const token = authService.getToken();
+    const user = authService.getUser();
+    if (token && user) {
+      return true;
+    }
+    return null;
+  });
 
   useEffect(() => {
-    let mounted = true;
-    let authFound = false;
+    // Sync store with localStorage on mount
+    const token = authService.getToken();
+    const user = authService.getUser();
     
-    const checkAuth = () => {
-      if (!mounted || authFound) return false;
-      
-      const token = authService.getToken();
-      const user = authService.getUser();
-      
-      console.log('🔒 ProtectedRoute: Checking auth', { 
-        token: !!token, 
-        tokenLength: token?.length,
-        user: !!user,
-        userEmail: user?.email,
-        path: window.location.pathname
-      });
-      
-      if (token && user) {
-        // Sync store with localStorage
-        setUser(user);
-        setIsAuthenticated(true);
-        authFound = true;
-        console.log('✅ ProtectedRoute: Authenticated - allowing access');
-        return true;
-      }
-      
-      return false;
-    };
-
-    // Check immediately
-    if (checkAuth()) {
-      return;
-    }
-
-    // Run sequential checks with delays
-    const checkSequence = async () => {
-      const delays = [50, 100, 200, 400, 600];
-      
-      for (const delay of delays) {
-        await new Promise(resolve => setTimeout(resolve, delay));
-        if (checkAuth() || !mounted) {
-          return;
-        }
-      }
-      
-      // Final check - if still no auth, mark as unauthenticated
-      if (mounted && !authFound) {
-        const finalToken = localStorage.getItem('token');
-        const finalUser = localStorage.getItem('user');
-        
+    if (token && user) {
+      setUser(user);
+      setIsAuthenticated(true);
+    } else {
+      // Give a small delay for async updates, then check again
+      const timeoutId = setTimeout(() => {
+        const finalToken = authService.getToken();
+        const finalUser = authService.getUser();
         if (finalToken && finalUser) {
-          console.log('⚠️ ProtectedRoute: Found token on final check');
-          const user = authService.getUser();
-          setUser(user);
+          setUser(finalUser);
           setIsAuthenticated(true);
         } else {
-          console.log('❌ ProtectedRoute: No token found after all checks');
           setIsAuthenticated(false);
         }
-      }
-    };
-
-    checkSequence();
-
-    return () => {
-      mounted = false;
-    };
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
   }, [setUser]);
 
   // Show loading spinner while checking
@@ -93,11 +56,9 @@ export default function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
-    console.log('❌ ProtectedRoute: Redirecting to login');
     return <Navigate to="/login" replace />;
   }
 
   // Render protected content
-  console.log('✅ ProtectedRoute: Rendering dashboard');
   return <>{children}</>;
 }

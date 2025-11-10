@@ -38,12 +38,10 @@ export class AuthService {
       });
 
       await this.usersRepository.save(user);
-      console.log('User saved:', user.id, user.email);
 
       // Generate JWT token
       const payload = { sub: user.id, email: user.email };
       const jwtSecret = this.configService.get<string>('JWT_SECRET') || 'your-secret-key';
-      console.log('[AuthService] signing token with secret', jwtSecret);
       const accessToken = this.jwtService.sign(payload, { secret: jwtSecret });
 
       return {
@@ -79,7 +77,6 @@ export class AuthService {
     // Generate JWT token
     const payload = { sub: user.id, email: user.email };
     const jwtSecret = this.configService.get<string>('JWT_SECRET') || 'your-secret-key';
-    console.log('[AuthService] signing token with secret', jwtSecret);
     const accessToken = this.jwtService.sign(payload, { secret: jwtSecret });
 
     return {
@@ -94,9 +91,7 @@ export class AuthService {
   }
 
   async validateUser(userId: number): Promise<User | null> {
-    console.log('[AuthService] validateUser called', { userId, type: typeof userId });
     const user = await this.usersRepository.findOne({ where: { id: userId } });
-    console.log('[AuthService] validateUser result', user ? { id: user.id, email: user.email } : null);
     return user;
   }
 }
