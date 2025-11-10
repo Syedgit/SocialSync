@@ -22,34 +22,32 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Don't redirect on 401 for login/signup endpoints
-    const isAuthEndpoint = error.config?.url?.includes('/auth/login') || 
-                          error.config?.url?.includes('/auth/signup');
-    
-    if (error.response?.status === 401 && !isAuthEndpoint) {
-      console.log('🚫 API: 401 Unauthorized on protected endpoint', {
-        url: error.config?.url,
-        pathname: window.location.pathname
-      });
+    // Handle 401 errors - let ProtectedRoute handle redirects
+    if (error.response?.status === 401) {
+      const isAuthEndpoint = error.config?.url?.includes('/auth/login') || 
+                            error.config?.url?.includes('/auth/signup');
       
-      // Only clear and redirect if we're not navigating (to avoid race conditions)
-      // Check if we just logged in (token exists)
-      const token = localStorage.getItem('token');
-      if (!token) {
-        // Token was already cleared, safe to redirect
-        localStorage.removeItem('user');
-        if (window.location.pathname !== '/login' && window.location.pathname !== '/signup') {
-          console.log('🚫 Redirecting to login (no token found)');
-          window.location.href = '/login';
+      if (!isAuthEndpoint) {
+        // For protected endpoints, clear auth if token is invalid
+        // ProtectedRoute will handle the redirect
+        const token = localStorage.getItem('token');
+        if (!token) {
+          // No token, clear user data
+          localStorage.removeItem('user');
         }
-      } else {
-        // Token exists but got 401 - might be expired or invalid
-        // Don't immediately clear, let the component handle it
-        console.warn('⚠️ Got 401 but token exists - might be expired');
+        // If token exists but got 401, it might be expired
+        // ProtectedRoute will check and redirect if needed
       }
-    } else if (error.response?.status === 401 && isAuthEndpoint) {
-      console.log('🔐 API: 401 on auth endpoint (login/signup failed)');
     }
+    
+    // Handle 404 errors
+    if (error.response?.status === 404) {
+      console.warn('⚠️ API: 404 Not Found', {
+        url: error.config?.url,
+        method: error.config?.method,
+      });
+    }
+    
     return Promise.reject(error);
   }
 );

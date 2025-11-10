@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Job, Queue, QueueEvents, Worker } from 'bullmq';
 import { Repository } from 'typeorm';
 import { Post, PostStatus } from './entities/post.entity';
+import { PlatformPublisherService } from './platform-publisher.service';
 
 interface PostJobData {
   postId: number;
@@ -14,9 +15,10 @@ interface SchedulerMetadata {
   scheduledFor?: string | null;
   lastScheduledAt?: string;
   lastRunAt?: string;
-  lastStatus?: 'scheduled' | 'published' | 'failed' | 'skipped';
+  lastStatus?: 'scheduled' | 'published' | 'partial' | 'failed' | 'skipped';
   lastError?: string | null;
   lastRecoveryAt?: string;
+  publishResults?: Record<string, { success: boolean; postId?: string; error?: string }>;
 }
 
 @Injectable()
@@ -32,6 +34,7 @@ export class PostsSchedulerService implements OnModuleDestroy, OnModuleInit {
     private readonly configService: ConfigService,
     @InjectRepository(Post)
     private readonly postsRepository: Repository<Post>,
+    private readonly platformPublisher: PlatformPublisherService,
   ) {
     const enabledFlag = this.configService.get<string>('ENABLE_SCHEDULER', 'true');
     this.isEnabled = enabledFlag?.toLowerCase() !== 'false';
@@ -226,24 +229,69 @@ export class PostsSchedulerService implements OnModuleDestroy, OnModuleInit {
     }
 
     try {
-      // TODO: integrate with actual publishing to platforms
+      // Actually publish to platforms
+      const publishResults = await this.platformPublisher.publishPost(post, post.userId);
+      
+      // Check if all platforms succeeded
+      const allSucceeded = Object.values(publishResults).every((result) => result.success);
+      const someSucceeded = Object.values(publishResults).some((result) => result.success);
+      
+      // Parse existing metadata
       const metadata = this.parseMetadata(post.metadata);
+      
+      // Store platform post IDs from successful publishes
+      const platformPostIds: Record<string, string> = {};
+      Object.entries(publishResults).forEach(([platform, result]) => {
+        if (result.success && result.postId) {
+          platformPostIds[platform] = result.postId;
+        }
+      });
+      
+      // Update post metadata with platform post IDs
+      if (!metadata.platformPostIds) {
+        metadata.platformPostIds = {};
+      }
+      Object.assign(metadata.platformPostIds, platformPostIds);
+      
+      // Update scheduler metadata
       metadata.scheduler = {
         ...(metadata.scheduler || {}),
-        lastStatus: 'published',
+        lastStatus: allSucceeded ? 'published' : someSucceeded ? 'partial' : 'failed',
         lastRunAt: now.toISOString(),
         scheduledFor: scheduledFor ? scheduledFor.toISOString() : null,
         jobId: this.getJobId(postId),
-        lastError: null,
+        lastError: allSucceeded ? null : JSON.stringify(publishResults),
+        publishResults,
       } satisfies SchedulerMetadata;
 
-      await this.postsRepository.update(postId, {
-        status: PostStatus.PUBLISHED,
+      // Update post status and platform post IDs
+      const updateData: any = {
         publishedAt: now,
         metadata: JSON.stringify(metadata),
-      });
+      };
+      
+      // Merge platform post IDs with existing ones
+      const existingPlatformPostIds = post.platformPostIds
+        ? typeof post.platformPostIds === 'string'
+          ? JSON.parse(post.platformPostIds)
+          : post.platformPostIds
+        : {};
+      Object.assign(existingPlatformPostIds, platformPostIds);
+      updateData.platformPostIds = JSON.stringify(existingPlatformPostIds);
+      
+      if (allSucceeded) {
+        updateData.status = PostStatus.PUBLISHED;
+        this.logger.log(`Post ${postId} successfully published to all platforms.`);
+      } else if (someSucceeded) {
+        updateData.status = PostStatus.PUBLISHED; // Partial success, still mark as published
+        this.logger.warn(`Post ${postId} partially published. Some platforms failed.`, publishResults);
+      } else {
+        updateData.status = PostStatus.FAILED;
+        this.logger.error(`Post ${postId} failed to publish to all platforms.`, publishResults);
+        throw new Error(`Failed to publish post: ${JSON.stringify(publishResults)}`);
+      }
 
-      this.logger.log(`Post ${postId} marked as published by scheduler.`);
+      await this.postsRepository.update(postId, updateData);
     } catch (error: any) {
       this.logger.error(`Failed to publish scheduled post ${postId}: ${error.message}`, error.stack);
 
