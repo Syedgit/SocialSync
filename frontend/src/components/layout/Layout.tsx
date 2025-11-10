@@ -33,6 +33,7 @@ export default function Layout() {
   const handleLogout = () => {
     logoutStore();
     authService.logout();
+    navigate('/login', { replace: true });
   };
 
   const handleDashboardNav = () => {
