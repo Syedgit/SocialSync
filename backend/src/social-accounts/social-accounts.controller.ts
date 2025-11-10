@@ -38,17 +38,27 @@ export class SocialAccountsController {
     let authUrl: string;
 
     // Include user ID in state for callback
-    const state = this.jwtService.sign({ userId: user.userId, platform }, { expiresIn: '10m' });
+    let statePayload: { userId: number; platform: string; codeVerifier?: string } = {
+      userId: user.userId,
+      platform,
+    };
 
     switch (platform) {
       case 'facebook':
-        authUrl = this.oauthService.getFacebookAuthUrl(state);
+        authUrl = this.oauthService.getFacebookAuthUrl(this.jwtService.sign(statePayload, { expiresIn: '10m' }));
         break;
       case 'twitter':
-        authUrl = this.oauthService.getTwitterAuthUrl(state);
+        // Generate codeVerifier first (without state to get verifier)
+        const tempTwitterAuth = this.oauthService.getTwitterAuthUrl();
+        // Store codeVerifier in state for later retrieval
+        statePayload.codeVerifier = tempTwitterAuth.codeVerifier;
+        const twitterState = this.jwtService.sign(statePayload, { expiresIn: '10m' });
+        // Generate auth URL with state and reuse the codeVerifier
+        const finalTwitterAuth = this.oauthService.getTwitterAuthUrl(twitterState, tempTwitterAuth.codeVerifier);
+        authUrl = finalTwitterAuth.authUrl;
         break;
       case 'linkedin':
-        authUrl = this.oauthService.getLinkedInAuthUrl(state);
+        authUrl = this.oauthService.getLinkedInAuthUrl(this.jwtService.sign(statePayload, { expiresIn: '10m' }));
         break;
       default:
         throw new Error(`Unsupported platform: ${platform}`);
@@ -66,27 +76,34 @@ export class SocialAccountsController {
     @Query('error_description') errorDescription: string,
     @Res() res: Response,
   ) {
+    // Get frontend URL with fallback
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'http://localhost:5173';
+    const frontendUrls = this.configService.get<string>('FRONTEND_URLS') || frontendUrl;
+    const firstFrontendUrl = frontendUrls.split(',')[0].trim();
+
     // Handle OAuth errors
     if (error) {
       return res.redirect(
-        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(errorDescription || 'Authorization failed')}`
+        `${firstFrontendUrl}/dashboard/accounts?error=${encodeURIComponent(error)}&error_description=${encodeURIComponent(errorDescription || 'Authorization failed')}`
       );
     }
 
     if (!code || !state) {
       return res.redirect(
-        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?error=missing_parameters&error_description=${encodeURIComponent('Missing authorization code or state')}`
+        `${firstFrontendUrl}/dashboard/accounts?error=missing_parameters&error_description=${encodeURIComponent('Missing authorization code or state')}`
       );
     }
 
     // Decode state to get user ID
     let userId: number;
+    let codeVerifier: string | undefined;
     try {
       const decoded = this.jwtService.verify(state);
       userId = parseInt(decoded.userId);
+      codeVerifier = decoded.codeVerifier;
     } catch (error) {
       return res.redirect(
-        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?error=invalid_state&error_description=${encodeURIComponent('Invalid or expired state parameter')}`
+        `${firstFrontendUrl}/dashboard/accounts?error=invalid_state&error_description=${encodeURIComponent('Invalid or expired state parameter')}`
       );
     }
 
@@ -116,7 +133,10 @@ export class SocialAccountsController {
           break;
 
         case 'twitter':
-          const twitterTokenData = await this.oauthService.getTwitterAccessToken(code);
+          if (!codeVerifier) {
+            throw new Error('Code verifier missing for Twitter OAuth');
+          }
+          const twitterTokenData = await this.oauthService.getTwitterAccessToken(code, codeVerifier);
           const twitterUserInfo = await this.oauthService.getTwitterUserInfo(twitterTokenData.access_token);
 
           accountData = {
@@ -180,13 +200,14 @@ export class SocialAccountsController {
         });
       }
 
-      // Redirect to frontend success page
+      // Redirect to frontend accounts page with success
       return res.redirect(
-        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?success=true`
+        `${firstFrontendUrl}/dashboard/accounts?success=true&platform=${platform}`
       );
-    } catch (error) {
+    } catch (error: any) {
+      console.error(`OAuth callback error for ${platform}:`, error.message);
       return res.redirect(
-        `${this.configService.get<string>('FRONTEND_URL')}/dashboard/oauth/${platform}/callback?error=connection_failed&error_description=${encodeURIComponent(error.message || 'Failed to connect account')}`
+        `${firstFrontendUrl}/dashboard/accounts?error=connection_failed&error_description=${encodeURIComponent(error.message || 'Failed to connect account')}`
       );
     }
   }

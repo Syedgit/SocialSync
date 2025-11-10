@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import * as crypto from 'crypto';
 
 export interface OAuthConfig {
   clientId: string;
@@ -72,17 +73,23 @@ export class OAuthService {
     }
   }
 
-  getTwitterAuthUrl(state?: string): string {
+  getTwitterAuthUrl(state?: string, codeVerifier?: string): { authUrl: string; codeVerifier: string } {
     const clientId = this.configService.get<string>('TWITTER_CLIENT_ID');
     const redirectUri = `${this.configService.get<string>('BACKEND_URL') || 'http://localhost:3000'}/api/social-accounts/oauth/twitter/callback`;
     
     const scope = 'tweet.read tweet.write users.read offline.access';
     const stateParam = state || this.generateState();
     
-    return `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(stateParam)}&code_challenge=challenge&code_challenge_method=plain`;
+    // Use provided codeVerifier or generate a new one
+    const verifier = codeVerifier || this.generateCodeVerifier();
+    const codeChallenge = this.generateCodeChallenge(verifier);
+    
+    const authUrl = `https://twitter.com/i/oauth2/authorize?response_type=code&client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}&state=${encodeURIComponent(stateParam)}&code_challenge=${encodeURIComponent(codeChallenge)}&code_challenge_method=S256`;
+    
+    return { authUrl, codeVerifier: verifier };
   }
 
-  async getTwitterAccessToken(code: string): Promise<any> {
+  async getTwitterAccessToken(code: string, codeVerifier: string): Promise<any> {
     const clientId = this.configService.get<string>('TWITTER_CLIENT_ID');
     const clientSecret = this.configService.get<string>('TWITTER_CLIENT_SECRET');
     const redirectUri = `${this.configService.get<string>('BACKEND_URL') || 'http://localhost:3000'}/api/social-accounts/oauth/twitter/callback`;
@@ -95,7 +102,7 @@ export class OAuthService {
           grant_type: 'authorization_code',
           client_id: clientId,
           redirect_uri: redirectUri,
-          code_verifier: 'challenge',
+          code_verifier: codeVerifier,
         }),
         {
           headers: {
@@ -106,7 +113,7 @@ export class OAuthService {
       );
 
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       throw new Error(`Twitter token exchange failed: ${error.message}`);
     }
   }
@@ -182,6 +189,15 @@ export class OAuthService {
 
   private generateState(): string {
     return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  }
+
+  private generateCodeVerifier(): string {
+    return crypto.randomBytes(32).toString('base64url');
+  }
+
+  private generateCodeChallenge(verifier: string): string {
+    const hash = crypto.createHash('sha256').update(verifier).digest();
+    return hash.toString('base64url');
   }
 }
 

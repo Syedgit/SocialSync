@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { socialAccountsService, SocialAccount } from '../services/social-accounts.service';
 import { postsService, Post } from '../services/posts.service';
 import {
@@ -41,11 +41,34 @@ export default function AccountsPage() {
   const [platformFilter, setPlatformFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
   useEffect(() => {
     loadData();
-  }, []);
+    
+    // Handle OAuth callback messages
+    const success = searchParams.get('success');
+    const error = searchParams.get('error');
+    
+    if (success === 'true') {
+      // Reload data to show newly connected account
+      loadData();
+      // Clear URL params after showing message
+      setTimeout(() => {
+        setSearchParams({});
+      }, 3000);
+    }
+    
+    if (error) {
+      const errorDescription = searchParams.get('error_description');
+      console.error('OAuth error:', error, errorDescription);
+      // Clear URL params after showing message
+      setTimeout(() => {
+        setSearchParams({});
+      }, 5000);
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     applyFilters();
@@ -112,12 +135,18 @@ export default function AccountsPage() {
 
   const getAccountStats = (platform: string) => {
     const accountPosts = posts.filter((post) => {
-      const platforms = Array.isArray(post.platforms)
-        ? post.platforms
-        : post.platforms
-        ? JSON.parse(post.platforms)
-        : [];
-      return platforms.includes(platform);
+      let platforms: string[] = [];
+      try {
+        if (Array.isArray(post.platforms)) {
+          platforms = post.platforms;
+        } else if (typeof post.platforms === 'string' && post.platforms.trim()) {
+          platforms = JSON.parse(post.platforms);
+        }
+      } catch (error) {
+        console.warn('Failed to parse platforms for post:', post.id, error);
+        platforms = [];
+      }
+      return Array.isArray(platforms) && platforms.includes(platform);
     });
 
     return {
@@ -150,9 +179,40 @@ export default function AccountsPage() {
   const totalAccounts = accounts.length;
   const verifiedAccounts = accounts.filter((a) => a.isVerified).length;
   const activeAccounts = accounts.filter((a) => a.isActive).length;
+  const success = searchParams.get('success');
+  const error = searchParams.get('error');
+  const errorDescription = searchParams.get('error_description');
+  const platform = searchParams.get('platform');
 
   return (
     <div className="w-full px-4 sm:px-6 lg:px-8 py-8">
+      {/* Success/Error Messages */}
+      {success === 'true' && (
+        <div className="mb-6 rounded-lg bg-green-50 border border-green-200 p-4">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm font-medium text-green-800">
+              {platform ? `${platform.charAt(0).toUpperCase() + platform.slice(1)} account connected successfully!` : 'Account connected successfully!'}
+            </p>
+          </div>
+        </div>
+      )}
+      {error && (
+        <div className="mb-6 rounded-lg bg-red-50 border border-red-200 p-4">
+          <div className="flex items-center">
+            <svg className="w-5 h-5 text-red-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="text-sm font-medium text-red-800">Failed to connect account</p>
+              {errorDescription && <p className="text-xs text-red-600 mt-1">{errorDescription}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
